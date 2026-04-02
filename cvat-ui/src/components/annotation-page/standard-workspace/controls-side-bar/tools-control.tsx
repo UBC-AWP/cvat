@@ -18,6 +18,8 @@ import Button from 'antd/lib/button';
 import Modal from 'antd/lib/modal';
 import Text from 'antd/lib/typography/Text';
 import Tabs from 'antd/lib/tabs';
+import InputNumber from 'antd/lib/input-number';
+import Progress from 'antd/lib/progress';
 import { Row, Col } from 'antd/lib/grid';
 import notification from 'antd/lib/notification';
 import message from 'antd/lib/message';
@@ -167,6 +169,10 @@ interface State {
     thresholdValue: number;
     mode: 'detection' | 'interaction' | 'tracking';
     portals: React.ReactPortal[];
+    trackFrameCount: number;
+    batchTracking: boolean;
+    batchTrackingProgress: number;
+    batchTrackingTotal: number;
 }
 
 type DetectorResults = Extract<Awaited<ReturnType<typeof core.lambda.call>>, { version: number }>;
@@ -269,6 +275,10 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
             showConfidenceControl: false,
             mode: 'interaction',
             portals: [],
+            trackFrameCount: 100,
+            batchTracking: false,
+            batchTrackingProgress: 0,
+            batchTrackingTotal: 0,
         };
 
         this.interaction = {
@@ -512,8 +522,112 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         this.runInteractionRequest(this.interaction.id);
     };
 
+    private batchTrackForObject = async (
+        clientID: number,
+        tracker: MLModel,
+        startFrame: number,
+        initialPoints: number[],
+        frameCount: number,
+    ): Promise<void> => {
+        const { jobInstance, fetchAnnotations, switchNavigationBlocked } = this.props;
+        const stopFrame = Math.min(startFrame + frameCount, jobInstance.stopFrame);
+        const totalFrames = stopFrame - startFrame;
+
+        if (totalFrames <= 0) return;
+
+        this.setState({
+            batchTracking: true,
+            batchTrackingProgress: 0,
+            batchTrackingTotal: totalFrames,
+        });
+
+        switchNavigationBlocked(true);
+
+        const MAX_RETRIES = 5;
+        const callWithRetry = async (args: Parameters<typeof core.lambda.call>): Promise<any> => {
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                try {
+                    // eslint-disable-next-line no-await-in-loop
+                    return await core.lambda.call(...args);
+                } catch (e: any) {
+                    const retryable = /500|timeout|chunk|Server Error/i.test(e.message);
+                    if (attempt < MAX_RETRIES - 1 && retryable) {
+                        const delay = (attempt + 1) * 5000;
+                        // eslint-disable-next-line no-await-in-loop
+                        await new Promise((r) => { setTimeout(r, delay); });
+                    } else {
+                        throw e;
+                    }
+                }
+            }
+            return null;
+        };
+
+        let currentShape: MinimalShape = { type: ShapeType.RECTANGLE, points: initialPoints };
+        let serverlessState: any = null;
+
+        try {
+            const initResponse = await callWithRetry([jobInstance.taskId, tracker, {
+                type: 'init_tracking',
+                frame: startFrame,
+                shapes: [currentShape],
+                job: jobInstance.id,
+            }]) as TrackerResults;
+            serverlessState = initResponse.states?.[0] ?? null;
+
+            for (let i = 1; i <= totalFrames; i++) {
+                const targetFrame = startFrame + i;
+
+                // eslint-disable-next-line no-await-in-loop
+                const trackResponse = await callWithRetry([jobInstance.taskId, tracker, {
+                    type: 'track',
+                    frame: targetFrame,
+                    states: [serverlessState],
+                    job: jobInstance.id,
+                }]) as TrackerResults;
+
+                const mappedShape = trackedRectangleMapper(trackResponse.shapes[0]);
+                serverlessState = trackResponse.states[0];
+                currentShape = mappedShape;
+
+                // eslint-disable-next-line no-await-in-loop
+                const allStates = await jobInstance.annotations.get(targetFrame, false, []);
+                const objectState = allStates.find(
+                    (s: ObjectState) => s.clientID === clientID,
+                );
+
+                if (objectState) {
+                    objectState.points = mappedShape.points;
+                    // eslint-disable-next-line no-await-in-loop
+                    await objectState.save();
+                }
+
+                this.setState({ batchTrackingProgress: i });
+            }
+
+            const { trackedShapes } = this.state;
+            const trackedShape = trackedShapes.find((ts) => ts.clientID === clientID);
+            if (trackedShape) {
+                trackedShape.serverlessState = serverlessState;
+                trackedShape.shapePoints = currentShape.points;
+            }
+
+            fetchAnnotations();
+        } catch (error: any) {
+            notification.error({
+                description: <CVATMarkdown>{error.message}</CVATMarkdown>,
+                message: `Batch tracking stopped at frame ${startFrame + (this.state.batchTrackingProgress || 0)}`,
+                duration: null,
+            });
+            fetchAnnotations();
+        } finally {
+            switchNavigationBlocked(false);
+            this.setState({ batchTracking: false, batchTrackingProgress: 0, batchTrackingTotal: 0 });
+        }
+    };
+
     private onTracking = async (e: Event): Promise<void> => {
-        const { trackedShapes, activeTracker, activeLabelID } = this.state;
+        const { trackedShapes, activeTracker, activeLabelID, trackFrameCount } = this.state;
         const {
             isActivated, jobInstance, frame, curZOrder, fetchAnnotations,
         } = this.props;
@@ -548,20 +662,24 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
             });
 
             const [clientID] = await jobInstance.annotations.put([state]);
+            const newTrackedShape: TrackedShape = {
+                clientID,
+                serverlessState: null,
+                shapePoints: points,
+                trackerModel: activeTracker as MLModel,
+            };
+
             this.setState({
-                trackedShapes: [
-                    ...trackedShapes,
-                    {
-                        clientID,
-                        serverlessState: null,
-                        shapePoints: points,
-                        trackerModel: activeTracker as MLModel,
-                    },
-                ],
+                trackedShapes: [...trackedShapes, newTrackedShape],
             });
 
-            // update annotations on a canvas
             fetchAnnotations();
+
+            if (trackFrameCount > 0 && activeTracker) {
+                await this.batchTrackForObject(
+                    clientID, activeTracker, frame, points, trackFrameCount,
+                );
+            }
         } catch (error: any) {
             notification.error({
                 description: <CVATMarkdown>{error.message}</CVATMarkdown>,
@@ -707,28 +825,85 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                     ) as HTMLElement;
 
                     const isTracked = trackedClientIDs.includes(clientID);
+                    const { batchTracking, trackFrameCount } = this.state;
+                    const { frame } = this.props;
                     if (targetElement) {
                         targetElement = targetElement.parentElement?.parentElement as HTMLElement;
                         return ReactDOM.createPortal(
                             <Col>
                                 {isTracked ? (
-                                    <CVATTooltip overlay='Disable tracking'>
-                                        <EnvironmentFilled
-                                            onClick={() => {
-                                                const filteredStates = trackedShapes.filter(
-                                                    (trackedShape: TrackedShape) => trackedShape.clientID !== clientID,
-                                                );
-                                                /* eslint no-param-reassign: ["error", { "props": false }] */
-                                                objectState.descriptions = [];
-                                                objectState.save().then(() => {
-                                                    this.setState({
-                                                        trackedShapes: filteredStates,
+                                    <>
+                                        <CVATTooltip overlay='Disable tracking'>
+                                            <EnvironmentFilled
+                                                onClick={() => {
+                                                    const filteredStates = trackedShapes.filter(
+                                                        (trackedShape: TrackedShape) => (
+                                                            trackedShape.clientID !== clientID
+                                                        ),
+                                                    );
+                                                    /* eslint no-param-reassign: ["error", { "props": false }] */
+                                                    objectState.descriptions = [];
+                                                    objectState.save().then(() => {
+                                                        this.setState({
+                                                            trackedShapes: filteredStates,
+                                                        });
+                                                        fetchAnnotations();
                                                     });
-                                                    fetchAnnotations();
-                                                });
-                                            }}
-                                        />
-                                    </CVATTooltip>
+                                                }}
+                                            />
+                                        </CVATTooltip>
+                                        <CVATTooltip overlay='Re-track from current frame'>
+                                            <Button
+                                                type='link'
+                                                size='small'
+                                                disabled={batchTracking}
+                                                style={{ padding: '0 4px', fontSize: '12px' }}
+                                                onClick={() => {
+                                                    const trackedShape = trackedShapes.find(
+                                                        (ts) => ts.clientID === clientID,
+                                                    );
+                                                    if (trackedShape && activeTracker) {
+                                                        const { jobInstance } = this.props;
+                                                        const maxFrames = jobInstance.stopFrame - frame;
+                                                        let inputValue = trackFrameCount;
+                                                        Modal.confirm({
+                                                            title: 'Re-track',
+                                                            icon: null,
+                                                            content: (
+                                                                <div>
+                                                                    <Text>
+                                                                        {`Frames to track (max ${maxFrames}):`}
+                                                                    </Text>
+                                                                    <InputNumber
+                                                                        style={{
+                                                                            width: '100%', marginTop: '8px',
+                                                                        }}
+                                                                        min={1}
+                                                                        max={maxFrames}
+                                                                        defaultValue={trackFrameCount}
+                                                                        onChange={(val: number | null) => {
+                                                                            inputValue = val ?? trackFrameCount;
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            ),
+                                                            onOk: () => {
+                                                                const points = objectState.points as number[];
+                                                                trackedShape.serverlessState = null;
+                                                                trackedShape.shapePoints = points;
+                                                                this.batchTrackForObject(
+                                                                    clientID, activeTracker!,
+                                                                    frame, points, inputValue,
+                                                                );
+                                                            },
+                                                        });
+                                                    }
+                                                }}
+                                            >
+                                                Re-track
+                                            </Button>
+                                        </CVATTooltip>
+                                    </>
                                 ) : (
                                     <CVATTooltip overlay={`Enable tracking using ${activeTracker.name}`}>
                                         <EnvironmentOutlined
@@ -1078,7 +1253,10 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         const {
             canvasInstance, jobInstance, frame, onInteractionStart,
         } = this.props;
-        const { activeTracker, activeLabelID, fetching } = this.state;
+        const {
+            activeTracker, activeLabelID, fetching, trackFrameCount,
+            batchTracking, batchTrackingProgress, batchTrackingTotal,
+        } = this.state;
 
         const supportedTrackers = this.getSupportedTrackers();
 
@@ -1118,13 +1296,45 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                         </Select>
                     </Col>
                 </Row>
+                <Row justify='start' style={{ marginTop: '8px' }}>
+                    <Col>
+                        <Text className='cvat-text-color'>Frames to track</Text>
+                    </Col>
+                </Row>
+                <Row align='middle' justify='center'>
+                    <Col span={24}>
+                        <InputNumber
+                            style={{ width: '100%' }}
+                            min={1}
+                            max={jobInstance.stopFrame - frame}
+                            value={trackFrameCount}
+                            onChange={(value: number | null) => {
+                                this.setState({ trackFrameCount: value ?? 100 });
+                            }}
+                        />
+                    </Col>
+                </Row>
+                {batchTracking && (
+                    <Row style={{ marginTop: '8px' }}>
+                        <Col span={24}>
+                            <Progress
+                                percent={Math.round((batchTrackingProgress / batchTrackingTotal) * 100)}
+                                size='small'
+                                format={() => `${batchTrackingProgress}/${batchTrackingTotal}`}
+                            />
+                        </Col>
+                    </Row>
+                )}
                 <Row align='middle' justify='end'>
                     <Col>
                         <Button
                             type='primary'
-                            loading={fetching}
+                            loading={fetching || batchTracking}
                             className='cvat-tools-track-button'
-                            disabled={!activeTracker || fetching || frame === jobInstance.stopFrame}
+                            disabled={
+                                !activeTracker || fetching || batchTracking ||
+                                frame === jobInstance.stopFrame
+                            }
                             onClick={() => {
                                 if (activeTracker && activeLabelID) {
                                     const { onSwitchToolsBlockerState } = this.props;
@@ -1457,6 +1667,8 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                 className: 'cvat-tools-control',
             };
 
+        const { batchTracking, batchTrackingProgress, batchTrackingTotal } = this.state;
+
         const showAnyContent = labels.length && !frameIsDeleted;
         const showInteractionContent = isActivated && mode === 'interaction' && interactorResponseReceived;
         const showDetectionContent = fetching && mode === 'detection';
@@ -1496,6 +1708,23 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
             </Modal>
         ) : null;
 
+        const batchTrackingContent: JSX.Element | null = batchTracking ? (
+            <Modal
+                title='Batch Tracking'
+                zIndex={Number.MAX_SAFE_INTEGER}
+                open
+                destroyOnClose
+                closable={false}
+                footer={[]}
+            >
+                <Text>{`Tracking frame ${batchTrackingProgress} of ${batchTrackingTotal}...`}</Text>
+                <Progress
+                    percent={Math.round((batchTrackingProgress / batchTrackingTotal) * 100)}
+                    status='active'
+                />
+            </Modal>
+        ) : null;
+
         return showAnyContent ? (
             <>
                 <CustomPopover {...dynamicPopoverProps} placement='right' content={this.renderPopoverContent()}>
@@ -1503,6 +1732,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                 </CustomPopover>
                 {interactionContent}
                 {detectionContent}
+                {batchTrackingContent}
                 {portals}
             </>
         ) : (

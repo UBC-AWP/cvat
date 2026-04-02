@@ -35,16 +35,19 @@ spec:
         - kind: RUN
           value: |-
             pip install \
-              jsonpickle opencv-python-headless \
-              torch==1.13.1+cu117 torchvision==0.14.1+cu117 numpy==1.26.4\
-              --extra-index-url https://download.pytorch.org/whl/cu117 \
+              jsonpickle opencv-python-headless numpy==1.26.4 \
+              torch torchvision \
+              --extra-index-url https://download.pytorch.org/whl/cu128 \
               --no-cache-dir
         - kind: WORKDIR
           value: /opt/nuclio
         - kind: RUN
           value: |-
             git clone --depth 1 --branch v1.0 https://github.com/dschoerk/TransT trans-t && \
-            sed -i 's%if float(torchvision.__version__\[:3\]) < 0.7%if False%g' trans-t/util/misc.py
+            sed -i 's%if float(torchvision.__version__\[:3\]) < 0.7%if False%g' trans-t/util/misc.py && \
+            sed -i 's%torch.load(path, map_location=%torch.load(path, weights_only=False, map_location=%g' trans-t/ltr/admin/loading.py && \
+            sed -i 's%from torchvision.models.resnet import model_urls%model_urls = {}%g' trans-t/ltr/models/backbone/resnet.py && \
+            sed -i 's%backbone_pretrained=True%backbone_pretrained=False%g' trans-t/ltr/models/tracking/transt.py
         - kind: ADD
           value: https://drive.google.com/uc?id=1Pq0sK-9jmbLAVtgB9-dPDc2pipCxYdM5 /transt.pth
 

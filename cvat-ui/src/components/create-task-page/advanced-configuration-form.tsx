@@ -54,11 +54,13 @@ export interface AdvancedConfiguration {
     targetStorage: StorageData;
 }
 
-const initialValues: AdvancedConfiguration = {
-    imageQuality: 70,
+const initialValues: AdvancedConfiguration & { frameStep: number } = {
+    imageQuality: 20,
     useZipChunks: true,
     useCache: true,
     copyData: false,
+    frameStep: 5,
+    dataChunkSize: 10000,
     sortingMethod: SortingMethod.LEXICOGRAPHICAL,
     useProjectSourceStorage: true,
     useProjectTargetStorage: true,
