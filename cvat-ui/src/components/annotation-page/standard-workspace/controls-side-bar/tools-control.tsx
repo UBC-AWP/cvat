@@ -693,11 +693,14 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         const { toolsBlockerState, isActivated, canvasInstance } = this.props;
         const { activeInteractor, mode } = this.state;
 
-        if (!isActivated || !activeInteractor) {
+        if (!isActivated) {
             return;
         }
 
         if (mode === 'interaction') {
+            if (!activeInteractor) {
+                return;
+            }
             const { shapes, finished } = (e as CustomEvent<{ shapes: InteractionResult[], finished: boolean }>).detail;
 
             if (finished) {
