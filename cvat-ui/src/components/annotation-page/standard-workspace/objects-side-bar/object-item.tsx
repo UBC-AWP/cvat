@@ -45,6 +45,7 @@ interface Props {
     changeColor(color: string): void;
     resetCuboidPerspective(): void;
     runAnnotationAction(): void;
+    setOutsideForRange(): void;
     edit(): void;
     slice(): void;
 }
@@ -79,6 +80,7 @@ function ObjectItemComponent(props: Props): JSX.Element {
         changeColor,
         resetCuboidPerspective,
         runAnnotationAction,
+        setOutsideForRange,
         edit,
         slice,
         jobInstance,
@@ -145,6 +147,7 @@ function ObjectItemComponent(props: Props): JSX.Element {
                     edit={edit}
                     slice={slice}
                     runAnnotationAction={runAnnotationAction}
+                    setOutsideForRange={setOutsideForRange}
                 />
                 <ObjectButtonsContainer clientID={clientID} />
                 <ItemDetailsContainer

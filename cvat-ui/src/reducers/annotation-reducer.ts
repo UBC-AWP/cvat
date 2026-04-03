@@ -157,6 +157,9 @@ const defaultState: AnnotationState = {
     propagate: {
         visible: false,
     },
+    setOutsideRange: {
+        visible: false,
+    },
     colors: [],
     sidebarCollapsed: false,
     appearanceCollapsed: false,
@@ -794,6 +797,15 @@ export default (state = defaultState, action: AnyAction): AnnotationState => {
             return {
                 ...state,
                 propagate: {
+                    visible,
+                },
+            };
+        }
+        case AnnotationActionTypes.SWITCH_SET_OUTSIDE_RANGE_VISIBILITY: {
+            const { visible } = action.payload;
+            return {
+                ...state,
+                setOutsideRange: {
                     visible,
                 },
             };

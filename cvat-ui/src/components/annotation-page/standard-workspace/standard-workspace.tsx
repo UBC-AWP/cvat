@@ -16,6 +16,7 @@ import CanvasPointContextMenuComponent from 'components/annotation-page/canvas/v
 import IssueAggregatorComponent from 'components/annotation-page/review/issues-aggregator';
 import RemoveConfirmComponent from 'components/annotation-page/standard-workspace/remove-confirm';
 import PropagateConfirmComponent from 'components/annotation-page/standard-workspace/propagate-confirm';
+import SetOutsideRangeModal from 'components/annotation-page/standard-workspace/set-outside-range-modal';
 import BrushTools from 'components/annotation-page/canvas/views/canvas2d/brush-tools';
 
 export default function StandardWorkspaceComponent(): JSX.Element {
@@ -26,6 +27,7 @@ export default function StandardWorkspaceComponent(): JSX.Element {
             <BrushTools />
             <ObjectSideBarComponent objectsList={<ObjectsListContainer />} />
             <PropagateConfirmComponent />
+            <SetOutsideRangeModal />
             <CanvasContextMenuContainer />
             <CanvasPointContextMenuComponent />
             <IssueAggregatorComponent />

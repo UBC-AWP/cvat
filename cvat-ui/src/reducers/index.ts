@@ -933,6 +933,9 @@ export interface AnnotationState {
     propagate: {
         visible: boolean;
     };
+    setOutsideRange: {
+        visible: boolean;
+    };
     colors: any[];
     filtersPanelVisible: boolean;
     sidebarCollapsed: boolean;

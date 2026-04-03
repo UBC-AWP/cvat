@@ -869,12 +869,73 @@ export class Track extends Drawn {
     protected withContext(frame: number): ReturnType<Drawn['withContext']> & {
         save: (data: ObjectState) => ObjectState;
         export: () => SerializedTrack;
+        setOutsideForRange: (startFrame: number, endFrame: number) => void;
     } {
         return {
             ...super.withContext(frame),
             save: this.save.bind(this, frame),
             export: this.toJSON.bind(this) as () => SerializedTrack,
+            setOutsideForRange: this.setOutsideForRange.bind(this),
         };
+    }
+
+    public setOutsideForRange(startFrame: number, endFrame: number): void {
+        const undoShapes: Record<number, TrackedShape | undefined> = {};
+        const redoShapes: Record<number, TrackedShape> = {};
+        const undoSource = this.source;
+        const redoSource = this.readOnlyFields.includes('source') ? this.source : computeNewSource(this.source);
+
+        const framesToModify: number[] = [];
+        for (let f = startFrame; f <= endFrame; f++) {
+            framesToModify.push(f);
+        }
+
+        for (const f of framesToModify) {
+            undoShapes[f] = f in this.shapes ? { ...this.shapes[f] } : undefined;
+            if (f in this.shapes) {
+                redoShapes[f] = { ...this.shapes[f], outside: true };
+            } else {
+                redoShapes[f] = copyShape(this.get(f), { outside: true });
+            }
+            this.shapes[f] = redoShapes[f];
+        }
+
+        const restoreFrame = endFrame + 1;
+        undoShapes[restoreFrame] = restoreFrame in this.shapes ? { ...this.shapes[restoreFrame] } : undefined;
+        if (restoreFrame in this.shapes) {
+            redoShapes[restoreFrame] = { ...this.shapes[restoreFrame], outside: false };
+        } else {
+            redoShapes[restoreFrame] = copyShape(this.get(restoreFrame), { outside: false });
+        }
+        this.shapes[restoreFrame] = redoShapes[restoreFrame];
+
+        this.source = redoSource;
+
+        this.history.do(
+            HistoryActions.CHANGED_OUTSIDE,
+            () => {
+                for (const frameStr of Object.keys(undoShapes)) {
+                    const f = +frameStr;
+                    if (undoShapes[f] === undefined) {
+                        delete this.shapes[f];
+                    } else {
+                        this.shapes[f] = undoShapes[f]!;
+                    }
+                }
+                this.source = undoSource;
+                this.updated = Date.now();
+            },
+            () => {
+                for (const frameStr of Object.keys(redoShapes)) {
+                    const f = +frameStr;
+                    this.shapes[f] = redoShapes[f];
+                }
+                this.source = redoSource;
+                this.updated = Date.now();
+            },
+            [this.clientID],
+            startFrame,
+        );
     }
 
     // Method is used to export data to the server

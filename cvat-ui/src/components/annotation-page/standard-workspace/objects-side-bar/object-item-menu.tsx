@@ -8,7 +8,7 @@ import Button from 'antd/lib/button';
 import { MenuProps } from 'antd/lib/menu';
 import Icon, {
     LinkOutlined, CopyOutlined, BlockOutlined, RetweetOutlined, DeleteOutlined, EditOutlined,
-    FunctionOutlined,
+    FunctionOutlined, EyeInvisibleOutlined,
 } from '@ant-design/icons';
 
 import {
@@ -55,6 +55,7 @@ interface Props {
     edit(): void;
     slice(): void;
     runAnnotationAction(): void;
+    setOutsideForRange(): void;
     jobInstance: Job;
 }
 
@@ -292,6 +293,21 @@ function RunAnnotationActionItem(props: ItemProps): JSX.Element {
     );
 }
 
+function SetOutsideRangeItem(props: ItemProps): JSX.Element {
+    const { toolProps } = props;
+    const { setOutsideForRange } = toolProps;
+    return (
+        <Button
+            type='link'
+            icon={<EyeInvisibleOutlined />}
+            onClick={setOutsideForRange}
+            className='cvat-object-item-menu-set-outside-range'
+        >
+            Set outside for range
+        </Button>
+    );
+}
+
 export default function ItemMenu(props: Props): MenuProps {
     const {
         locked, shapeType, objectType, colorBy, jobInstance,
@@ -312,6 +328,7 @@ export default function ItemMenu(props: Props): MenuProps {
         EDIT_MASK = 'edit_mask',
         SLICE_ITEM = 'slice_item',
         RUN_ANNOTATION_ACTION = 'run_annotation_action',
+        SET_OUTSIDE_RANGE = 'set_outside_range',
     }
 
     const is2D = jobInstance.dimension === DimensionType.DIMENSION_2D;
@@ -390,6 +407,13 @@ export default function ItemMenu(props: Props): MenuProps {
         items.push({
             key: MenuKeys.SWITCH_COLOR,
             label: <SwitchColorItem toolProps={props} />,
+        });
+    }
+
+    if (!locked && objectType === ObjectType.TRACK) {
+        items.push({
+            key: MenuKeys.SET_OUTSIDE_RANGE,
+            label: <SetOutsideRangeItem toolProps={props} />,
         });
     }
 

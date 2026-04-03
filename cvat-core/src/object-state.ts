@@ -64,6 +64,7 @@ export interface SerializedData {
     __internal?: {
         save: (objectState: ObjectState) => ObjectState;
         delete: (frame: number, force: boolean) => boolean;
+        setOutsideForRange?: (startFrame: number, endFrame: number) => void;
     };
 }
 
@@ -525,6 +526,12 @@ export default class ObjectState {
     async export(): Promise<SerializedShape | SerializedTrack | SerializedTag> {
         const result = await PluginRegistry.apiWrapper.call(this, ObjectState.prototype.export);
         return result;
+    }
+
+    setOutsideForRange(startFrame: number, endFrame: number): void {
+        if (this.__internal && (this.__internal as any).setOutsideForRange) {
+            (this.__internal as any).setOutsideForRange(startFrame, endFrame);
+        }
     }
 }
 

@@ -15,6 +15,7 @@ import {
     copyShape as copyShapeAction,
     activateObject as activateObjectAction,
     switchPropagateVisibility as switchPropagateVisibilityAction,
+    switchSetOutsideRangeVisibility as switchSetOutsideRangeVisibilityAction,
     removeObject as removeObjectAction,
     collapseObjectItems,
 } from 'actions/annotation-actions';
@@ -63,6 +64,7 @@ interface DispatchToProps {
     removeObject: (objectState: ObjectState) => void;
     copyShape: (objectState: ObjectState) => void;
     switchPropagateVisibility: (visible: boolean) => void;
+    switchSetOutsideRangeVisibility: (visible: boolean) => void;
     changeGroupColor(group: number, color: string): void;
     updateActiveControl(activeControl: ActiveControl): void;
     expandObject(objectState: ObjectState): void;
@@ -131,6 +133,9 @@ function mapDispatchToProps(dispatch: any): DispatchToProps {
         switchPropagateVisibility(visible: boolean): void {
             dispatch(switchPropagateVisibilityAction(visible));
         },
+        switchSetOutsideRangeVisibility(visible: boolean): void {
+            dispatch(switchSetOutsideRangeVisibilityAction(visible));
+        },
         changeGroupColor(group: number, color: string): void {
             dispatch(changeGroupColorAsync(group, color));
         },
@@ -180,6 +185,11 @@ class ObjectItemContainer extends React.PureComponent<Props, State> {
     private propagate = (): void => {
         const { switchPropagateVisibility } = this.props;
         switchPropagateVisibility(true);
+    };
+
+    private setOutsideForRange = (): void => {
+        const { switchSetOutsideRangeVisibility } = this.props;
+        switchSetOutsideRangeVisibility(true);
     };
 
     private edit = (): void => {
@@ -446,6 +456,7 @@ class ObjectItemContainer extends React.PureComponent<Props, State> {
                 slice={this.slice}
                 resetCuboidPerspective={this.resetCuboidPerspective}
                 runAnnotationAction={this.runAnnotationAction}
+                setOutsideForRange={this.setOutsideForRange}
             />
         );
     }

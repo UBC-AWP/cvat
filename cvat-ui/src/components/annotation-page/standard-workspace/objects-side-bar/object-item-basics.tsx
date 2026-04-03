@@ -53,6 +53,7 @@ interface Props {
     toOneLayerForward(): void;
     resetCuboidPerspective(): void;
     runAnnotationAction(): void;
+    setOutsideForRange(): void;
     edit(): void;
     slice(): void;
 }
@@ -94,6 +95,7 @@ function ItemTopComponent(props: Props): JSX.Element {
         toOneLayerForward,
         resetCuboidPerspective,
         runAnnotationAction,
+        setOutsideForRange,
         edit,
         slice,
         jobInstance,
@@ -182,6 +184,7 @@ function ItemTopComponent(props: Props): JSX.Element {
                             edit,
                             slice,
                             runAnnotationAction,
+                            setOutsideForRange,
                         })}
                     >
                         <Col span={2}>

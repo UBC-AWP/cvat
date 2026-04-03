@@ -15,6 +15,7 @@ import CanvasLayout from 'components/annotation-page/canvas/grid-layout/canvas-l
 import CanvasPointContextMenuComponent from 'components/annotation-page/canvas/views/canvas2d/canvas-point-context-menu';
 import RemoveConfirmComponent from 'components/annotation-page/standard-workspace/remove-confirm';
 import PropagateConfirmComponent from 'components/annotation-page/standard-workspace/propagate-confirm';
+import SetOutsideRangeModal from 'components/annotation-page/standard-workspace/set-outside-range-modal';
 
 export default function StandardWorkspace3DComponent(): JSX.Element {
     return (
@@ -23,6 +24,7 @@ export default function StandardWorkspace3DComponent(): JSX.Element {
             <CanvasLayout type={DimensionType.DIMENSION_3D} />
             <ObjectSideBarComponent objectsList={<ObjectsListContainer />} />
             <PropagateConfirmComponent />
+            <SetOutsideRangeModal />
             <CanvasContextMenuContainer />
             <CanvasPointContextMenuComponent />
             <RemoveConfirmComponent />

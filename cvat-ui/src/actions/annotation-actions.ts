@@ -177,6 +177,7 @@ export enum AnnotationActionTypes {
     UPDATE_BRUSH_TOOLS_CONFIG = 'UPDATE_BRUSH_TOOLS_CONFIG',
     HIGHLIGHT_CONFLICT = 'HIGHLIGHT_CONFCLICT',
     HOVERED_CHAPTER = 'HOVERED_CHAPTER',
+    SWITCH_SET_OUTSIDE_RANGE_VISIBILITY = 'SWITCH_SET_OUTSIDE_RANGE_VISIBILITY',
 }
 
 export function setHoveredChapter(id: number | null): AnyAction {
@@ -502,6 +503,44 @@ export function switchPropagateVisibility(visible: boolean): AnyAction {
     return {
         type: AnnotationActionTypes.SWITCH_PROPAGATE_VISIBILITY,
         payload: { visible },
+    };
+}
+
+export function switchSetOutsideRangeVisibility(visible: boolean): AnyAction {
+    return {
+        type: AnnotationActionTypes.SWITCH_SET_OUTSIDE_RANGE_VISIBILITY,
+        payload: { visible },
+    };
+}
+
+export function setOutsideForRangeAsync(startFrame: number, endFrame: number): ThunkAction {
+    return async (dispatch: ThunkDispatch, getState): Promise<void> => {
+        const state = getState();
+        const {
+            job: { instance: sessionInstance },
+            annotations: { activatedStateID, states: objectStates },
+        } = state.annotation;
+
+        const objectState = objectStates.find((_state: any) => _state.clientID === activatedStateID);
+        if (!objectState) {
+            throw new Error('No activated object state for set outside range');
+        }
+
+        if (!sessionInstance) {
+            throw new Error('SessionInstance is not defined');
+        }
+
+        objectState.setOutsideForRange(startFrame, endFrame);
+
+        const {
+            states, history, minZ, maxZ,
+        } = await fetchAnnotations();
+        dispatch({
+            type: AnnotationActionTypes.FETCH_ANNOTATIONS_SUCCESS,
+            payload: {
+                states, history, minZ, maxZ,
+            },
+        });
     };
 }
 
