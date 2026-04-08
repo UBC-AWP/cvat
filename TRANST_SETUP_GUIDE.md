@@ -64,9 +64,9 @@ wsl --install -d Ubuntu
 Then inside WSL:
 
 ```bash
-curl -L https://github.com/nuclio/nuclio/releases/download/1.15.9/nuctl-1.15.9-linux-amd64 \
+sudo curl -L https://github.com/nuclio/nuclio/releases/download/1.15.9/nuctl-1.15.9-linux-amd64 \
   -o /usr/local/bin/nuctl
-chmod +x /usr/local/bin/nuctl
+sudo chmod +x /usr/local/bin/nuctl
 nuctl version   # verify it works
 ```
 
@@ -93,7 +93,17 @@ docker network create cvat_cvat
 
 If it says the network already exists, that's fine — move on.
 
-## Step 5 — Deploy TransT
+## Step 5 — Create the Nuclio Project
+
+Before deploying any functions, create the Nuclio project:
+
+```bash
+nuctl create project cvat --platform local
+```
+
+If the project already exists, you'll see an error — that's fine, move on.
+
+## Step 6 — Deploy TransT
 
 Choose **one** of the two options below depending on your hardware.
 
@@ -111,7 +121,7 @@ nuctl deploy --project-name cvat \
   --path "<your-cvat-path>/serverless/pytorch/dschoerk/transt/nuclio" \
   --file "<your-cvat-path>/serverless/pytorch/dschoerk/transt/nuclio/function-gpu.yaml" \
   --platform local \
-  --triggers '{"myHttpTrigger": {"maxWorkers": 1}}'
+  --triggers '{"myHttpTrigger": {"numWorkers": 1}}'
 ```
 
 ### Option B — CPU only (no GPU / macOS)
@@ -123,7 +133,7 @@ nuctl deploy --project-name cvat \
   --path "<your-cvat-path>/serverless/pytorch/dschoerk/transt/nuclio" \
   --file "<your-cvat-path>/serverless/pytorch/dschoerk/transt/nuclio/function.yaml" \
   --platform local \
-  --triggers '{"myHttpTrigger": {"maxWorkers": 1}}'
+  --triggers '{"myHttpTrigger": {"numWorkers": 1}}'
 ```
 
 Replace `<your-cvat-path>` with the actual path to your cvat folder
@@ -142,7 +152,7 @@ You can verify the function is running:
 nuctl get functions --namespace cvat
 ```
 
-## Step 6 — Start Using TransT
+## Step 7 — Start Using TransT
 
 1. Open CVAT at http://localhost:8080
 2. Create a task and upload your video or images
