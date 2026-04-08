@@ -31,17 +31,13 @@ then do a clean checkout:
 git reset --hard origin/develop
 ```
 
-## Step 2 — Rebuild the UI
+## Step 2 — Pull and Start
 
-Our changes are in the frontend code, so the UI image must be rebuilt:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml build --no-cache cvat_ui
-```
-
-Then restart everything:
+Our custom UI image is pre-built and hosted on Docker Hub, so no local build
+is needed:
 
 ```bash
+docker compose pull cvat_ui
 docker compose down
 docker compose up -d
 ```

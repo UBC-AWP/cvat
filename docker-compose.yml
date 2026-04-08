@@ -248,7 +248,7 @@ services:
 
   cvat_ui:
     container_name: cvat_ui
-    image: cvat/ui:${CVAT_VERSION:-dev}
+    image: ubcawp/cvat-ui:latest
     restart: always
     depends_on:
       - cvat_server
