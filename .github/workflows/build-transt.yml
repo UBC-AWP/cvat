@@ -1,0 +1,125 @@
+name: Build and Push TransT
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "serverless/pytorch/dschoerk/transt/**"
+  workflow_dispatch:
+    inputs:
+      build_gpu:
+        description: "Build GPU image"
+        type: boolean
+        default: true
+      build_cpu:
+        description: "Build CPU image"
+        type: boolean
+        default: true
+
+env:
+  DOCKER_REPO: skysheng7/cvat-transt
+  NUCLIO_VERSION: "1.15.9"
+  GOOGLE_DRIVE_FILE_ID: "1Pq0sK-9jmbLAVtgB9-dPDc2pipCxYdM5"
+
+jobs:
+  build-gpu:
+    name: Build GPU image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || inputs.build_gpu }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Download TransT model weights
+        run: |
+          pip install gdown
+          gdown "${{ env.GOOGLE_DRIVE_FILE_ID }}" \
+            -O serverless/pytorch/dschoerk/transt/nuclio/transt.pth
+
+      - name: Install nuctl
+        run: |
+          sudo curl -sL \
+            "https://github.com/nuclio/nuclio/releases/download/${{ env.NUCLIO_VERSION }}/nuctl-${{ env.NUCLIO_VERSION }}-linux-amd64" \
+            -o /usr/local/bin/nuctl
+          sudo chmod +x /usr/local/bin/nuctl
+          nuctl version
+
+      - name: Patch function.yaml to use local model weights
+        working-directory: serverless/pytorch/dschoerk/transt/nuclio
+        run: |
+          sed -i 's|kind: ADD|kind: COPY|' function-gpu.yaml
+          sed -i 's|value: https://drive.google.com/uc?id=${{ env.GOOGLE_DRIVE_FILE_ID }} /transt.pth|value: transt.pth /transt.pth|' function-gpu.yaml
+
+      - name: Build GPU image with nuctl
+        run: |
+          nuctl build pth-dschoerk-transt \
+            --path serverless/pytorch/dschoerk/transt/nuclio \
+            --file serverless/pytorch/dschoerk/transt/nuclio/function-gpu.yaml \
+            --platform local
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push GPU image
+        run: |
+          docker tag cvat.pth.dschoerk.transt:latest-gpu "${{ env.DOCKER_REPO }}:latest-gpu"
+          docker push "${{ env.DOCKER_REPO }}:latest-gpu"
+
+  build-cpu:
+    name: Build CPU image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || inputs.build_cpu }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Download TransT model weights
+        run: |
+          pip install gdown
+          gdown "${{ env.GOOGLE_DRIVE_FILE_ID }}" \
+            -O serverless/pytorch/dschoerk/transt/nuclio/transt.pth
+
+      - name: Install nuctl
+        run: |
+          sudo curl -sL \
+            "https://github.com/nuclio/nuclio/releases/download/${{ env.NUCLIO_VERSION }}/nuctl-${{ env.NUCLIO_VERSION }}-linux-amd64" \
+            -o /usr/local/bin/nuctl
+          sudo chmod +x /usr/local/bin/nuctl
+          nuctl version
+
+      - name: Patch function.yaml to use local model weights
+        working-directory: serverless/pytorch/dschoerk/transt/nuclio
+        run: |
+          sed -i 's|kind: ADD|kind: COPY|' function.yaml
+          sed -i 's|value: https://drive.google.com/uc?id=${{ env.GOOGLE_DRIVE_FILE_ID }} /transt.pth|value: transt.pth /transt.pth|' function.yaml
+
+      - name: Build CPU image with nuctl
+        run: |
+          nuctl build pth-dschoerk-transt \
+            --path serverless/pytorch/dschoerk/transt/nuclio \
+            --file serverless/pytorch/dschoerk/transt/nuclio/function.yaml \
+            --platform local
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push CPU image
+        run: |
+          docker tag cvat.pth.dschoerk.transt "${{ env.DOCKER_REPO }}:latest-cpu"
+          docker push "${{ env.DOCKER_REPO }}:latest-cpu"

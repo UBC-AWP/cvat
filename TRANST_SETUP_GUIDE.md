@@ -33,122 +33,48 @@ git reset --hard origin/develop
 
 ## Step 2 — Pull and Start
 
-Our custom UI image is pre-built and hosted on Docker Hub, so no local build
-is needed:
+Everything — the UI, the Nuclio serverless runtime, and the TransT tracker — is
+pre-built and published to Docker Hub. No extra tools needed.
 
 ```bash
-docker compose pull cvat_ui
+docker compose pull
 docker compose down
 docker compose up -d
 ```
 
-Open http://localhost:8080 and verify you can log in.
+On first run the TransT image (~several GB) will be pulled automatically.
+This is a one-time download.
 
-## Step 3 — Install nuctl
+### CPU-only machines (no NVIDIA GPU / macOS)
 
-`nuctl` is the CLI tool for deploying serverless functions (like TransT) to Nuclio.
-
-### Windows
-
-nuctl does not run natively on Windows. Use **WSL** (Windows Subsystem for Linux):
-
-```powershell
-# In PowerShell (one-time setup if you don't have WSL yet)
-wsl --install -d Ubuntu
-```
-
-Then inside WSL:
+By default the GPU variant is deployed. To use the lighter CPU-only image instead,
+create a `.env` file (or export before running):
 
 ```bash
-sudo curl -L https://github.com/nuclio/nuclio/releases/download/1.15.9/nuctl-1.15.9-linux-amd64 \
-  -o /usr/local/bin/nuctl
-sudo chmod +x /usr/local/bin/nuctl
-nuctl version   # verify it works
+echo 'CVAT_TRANST_IMAGE=skysheng7/cvat-transt:latest-cpu' >> .env
+echo 'CVAT_TRANST_GPU=false' >> .env
+docker compose up -d
 ```
 
-### macOS
+## Step 3 — Verify TransT Is Running
+
+After startup, an init container automatically registers the TransT function
+with the Nuclio serverless runtime. You can check its status:
 
 ```bash
-# Intel Mac
-curl -L https://github.com/nuclio/nuclio/releases/download/1.15.9/nuctl-1.15.9-darwin-amd64 \
-  -o /usr/local/bin/nuctl
-
-# Apple Silicon (M1/M2/M3/M4)
-curl -L https://github.com/nuclio/nuclio/releases/download/1.15.9/nuctl-1.15.9-darwin-arm64 \
-  -o /usr/local/bin/nuctl
-
-chmod +x /usr/local/bin/nuctl
-nuctl version   # verify it works
+docker compose logs cvat_transt_init
 ```
 
-## Step 4 — Create the Docker Network
-
-```bash
-docker network create cvat_cvat
-```
-
-If it says the network already exists, that's fine — move on.
-
-## Step 5 — Create the Nuclio Project
-
-Before deploying any functions, create the Nuclio project:
-
-```bash
-nuctl create project cvat --platform local
-```
-
-If the project already exists, you'll see an error — that's fine, move on.
-
-## Step 6 — Deploy TransT
-
-Choose **one** of the two options below depending on your hardware.
-
-> **Important (Windows/WSL):** All `nuctl` commands below must be run inside WSL.
-> WSL accesses your Windows drives under `/mnt/`. For example, if you cloned the
-> repo to `C:\Users\alice\cvat`, the WSL path is `/mnt/c/Users/alice/cvat`.
-> Adjust the paths below accordingly.
-
-### Option A — With NVIDIA GPU (recommended)
-
-Works with RTX 30-series, 40-series, and 50-series (including RTX 5070/5080/5090).
-
-```bash
-nuctl deploy --project-name cvat \
-  --path "<your-cvat-path>/serverless/pytorch/dschoerk/transt/nuclio" \
-  --file "<your-cvat-path>/serverless/pytorch/dschoerk/transt/nuclio/function-gpu.yaml" \
-  --platform local \
-  --triggers '{"myHttpTrigger": {"numWorkers": 1}}'
-```
-
-### Option B — CPU only (no GPU / macOS)
-
-Slower but works on any machine.
-
-```bash
-nuctl deploy --project-name cvat \
-  --path "<your-cvat-path>/serverless/pytorch/dschoerk/transt/nuclio" \
-  --file "<your-cvat-path>/serverless/pytorch/dschoerk/transt/nuclio/function.yaml" \
-  --platform local \
-  --triggers '{"myHttpTrigger": {"numWorkers": 1}}'
-```
-
-Replace `<your-cvat-path>` with the actual path to your cvat folder
-(e.g. `/mnt/c/Users/alice/cvat` on Windows/WSL, or `/Users/alice/cvat` on Mac).
-
-Deployment takes **5–10 minutes** (downloads PyTorch and model weights).
-When finished you should see:
+You should see output ending with:
 
 ```
-State: ready
+TransT function registered. The dashboard will pull the image and start the container.
 ```
 
-You can verify the function is running:
+You can also open the Nuclio dashboard at http://localhost:8070 to see the
+function status.
 
-```bash
-nuctl get functions --namespace cvat
-```
-
-## Step 7 — Start Using TransT
+## Step 4 — Start Using TransT
 
 1. Open CVAT at http://localhost:8080
 2. Create a task and upload your video or images
@@ -168,8 +94,36 @@ nuctl get functions --namespace cvat
 
 | Problem | Solution |
 |---------|----------|
-| TransT not showing in the Tracker dropdown | Refresh the page. Check that the function is running: `nuctl get functions --namespace cvat` |
-| `nuctl deploy` fails on Windows | Make sure you are running inside WSL, not PowerShell |
+| TransT not showing in the Tracker dropdown | Refresh the page. Check Nuclio dashboard at http://localhost:8070 — the function should show as "ready" |
+| Function stuck in "building" state | Check Docker can pull the image: `docker pull skysheng7/cvat-transt:latest-gpu` |
 | Tracking stops with a timeout error | The retry mechanism will automatically retry up to 5 times. If it keeps failing, try reducing the number of frames per batch |
-| `CUDA error: no kernel image` | You need the GPU version (`function-gpu.yaml`) which uses CUDA 12.8. Make sure your NVIDIA drivers are up to date |
+| `CUDA error: no kernel image` | Make sure your NVIDIA drivers are up to date. The GPU image uses CUDA 12.8 |
 | Containers won't start after rebuild | Run `docker compose down` first, then `docker compose up -d` |
+| Want to re-deploy TransT after changes | Remove the function container and re-run: `docker rm -f nuclio-nuclio-pth-dschoerk-transt && docker compose up -d cvat_transt_init` |
+
+---
+
+## Advanced: Manual Deployment with nuctl
+
+If you prefer manual control (or need to customize the function), you can
+skip the automatic init container and deploy TransT yourself using `nuctl`:
+
+```bash
+# Install nuctl (macOS Apple Silicon example)
+curl -L https://github.com/nuclio/nuclio/releases/download/1.15.9/nuctl-1.15.9-darwin-arm64 \
+  -o /usr/local/bin/nuctl
+chmod +x /usr/local/bin/nuctl
+
+# Create the Nuclio project
+nuctl create project cvat --platform local
+
+# Deploy from source (builds locally — takes 5-10 min)
+nuctl deploy --project-name cvat \
+  --path serverless/pytorch/dschoerk/transt/nuclio \
+  --file serverless/pytorch/dschoerk/transt/nuclio/function-gpu.yaml \
+  --platform local \
+  --triggers '{"myHttpTrigger": {"numWorkers": 1}}'
+```
+
+To disable the automatic init container when using manual deployment,
+set `CVAT_TRANST_IMAGE=none` in your `.env` file.
