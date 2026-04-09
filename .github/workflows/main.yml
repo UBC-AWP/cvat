@@ -525,7 +525,7 @@ jobs:
           path: "${{ github.workspace }}/rest_api_testing"
 
   publish_dev_images:
-    if: github.ref == 'refs/heads/develop'
+    if: github.repository == 'cvat-ai/cvat' && github.ref == 'refs/heads/develop'
     needs: [rest_api_testing, unit_testing, e2e_testing]
     runs-on: ubuntu-latest
     steps:
@@ -577,6 +577,7 @@ jobs:
       AWS_ALLURE_REPORTS_ROLE: ${{ secrets.AWS_ALLURE_REPORTS_ROLE }}
 
   codecov:
+    if: github.repository == 'cvat-ai/cvat'
     runs-on: ubuntu-latest
     needs: [unit_testing, e2e_testing, rest_api_testing]
     steps:

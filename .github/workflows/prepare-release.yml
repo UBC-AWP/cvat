@@ -8,6 +8,7 @@ on:
         default: X.Y.Z
 jobs:
   main:
+    if: github.repository == 'cvat-ai/cvat'
     runs-on: ubuntu-latest
     steps:
       - name: Validate version number

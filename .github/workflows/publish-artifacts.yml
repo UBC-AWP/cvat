@@ -5,6 +5,7 @@ on:
 
 jobs:
   docker-images:
+    if: github.repository == 'cvat-ai/cvat'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
