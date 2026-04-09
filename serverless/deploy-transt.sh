@@ -74,6 +74,9 @@ BODY=$(cat <<EOF
   "metadata": {
     "name": "pth-dschoerk-transt",
     "namespace": "nuclio",
+    "labels": {
+      "nuclio.io/project-name": "cvat"
+    },
     "annotations": {
       "name": "TransT",
       "type": "tracker",
