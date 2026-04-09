@@ -248,7 +248,7 @@ services:
 
   cvat_ui:
     container_name: cvat_ui
-    image: skysheng7/cvat-ui:latest
+    image: skysheng7/cvat-ui:614cf8b
     restart: always
     depends_on:
       - cvat_server
