@@ -119,9 +119,23 @@ EOF
 # Deploy
 # ---------------------------------------------------------------------------
 echo "Deploying TransT from image: ${TRANST_IMAGE} ..."
-curl -sf -X POST "${DASHBOARD}/api/functions" \
+DEPLOY_HTTP=$(curl -s -o /tmp/deploy_resp.txt -w "%{http_code}" \
+  -X POST "${DASHBOARD}/api/functions" \
   -H "Content-Type: application/json" \
-  -d "${BODY}"
+  -d "${BODY}")
 
-echo ""
-echo "TransT function registered. The dashboard will pull the image and start the container."
+case "$DEPLOY_HTTP" in
+  20*|202)
+    echo ""
+    echo "TransT function registered. The dashboard will pull the image and start the container."
+    ;;
+  409)
+    echo "  function already exists (409) — nothing to do."
+    ;;
+  *)
+    echo "ERROR: deploy returned HTTP ${DEPLOY_HTTP}" >&2
+    cat /tmp/deploy_resp.txt >&2
+    echo "" >&2
+    exit 1
+    ;;
+esac
