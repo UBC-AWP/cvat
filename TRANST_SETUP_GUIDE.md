@@ -1,6 +1,6 @@
 # Upgrade Guide: UBC-AWP CVAT Fork
 
-This guide is for users who **already have CVAT running via Docker** on their machine
+This guide is for users who **already have installed CVAT** on their machine
 and want to upgrade to our customized fork with batch TransT tracking.
 
 ## What's New
