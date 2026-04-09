@@ -58,6 +58,7 @@ jobs:
       - name: Build GPU image with nuctl
         run: |
           nuctl build pth-dschoerk-transt \
+            --project-name cvat \
             --path serverless/pytorch/dschoerk/transt/nuclio \
             --file serverless/pytorch/dschoerk/transt/nuclio/function-gpu.yaml \
             --platform local
@@ -109,6 +110,7 @@ jobs:
       - name: Build CPU image with nuctl
         run: |
           nuctl build pth-dschoerk-transt \
+            --project-name cvat \
             --path serverless/pytorch/dschoerk/transt/nuclio \
             --file serverless/pytorch/dschoerk/transt/nuclio/function.yaml \
             --platform local
