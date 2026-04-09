@@ -1,3 +1,8 @@
+# Publishes docker image, pinning actions to a commit SHA,
+# and updating most recently built image with the latest tag.
+# Can be triggered by either pushing a commit that changes the UI source,
+# or manually dispatching the workflow.
+
 name: Build and Push CVAT UI
 
 on:
@@ -17,9 +22,10 @@ on:
 
 jobs:
   build-and-push:
+    name: Push Docker image to Docker Hub
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Check out the repo
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
@@ -31,18 +37,36 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract short SHA
-        id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: skysheng7/cvat-ui
+          tags: |
+            type=raw,value={{sha}},enable=${{ github.ref_type != 'tag' }}
+            type=raw,value=latest
 
-      - name: Build and push
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.ui
           push: true
-          tags: |
-            skysheng7/cvat-ui:latest
-            skysheng7/cvat-ui:${{ steps.vars.outputs.sha_short }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Update docker-compose.yml with new image tag
+        if: success()
+        run: |
+          sed -i "s|image: skysheng7/cvat-ui:.*|image: skysheng7/cvat-ui:${{ steps.meta.outputs.version }}|" docker-compose.yml
+
+      - name: Commit and push updated docker-compose.yml
+        if: success()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add docker-compose.yml
+          git commit -m "Update docker-compose.yml with new image tag"
+          git push
