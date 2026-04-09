@@ -53,7 +53,7 @@ jobs:
         working-directory: serverless/pytorch/dschoerk/transt/nuclio
         run: |
           sed -i 's|kind: ADD|kind: COPY|' function-gpu.yaml
-          sed -i 's|value: https://drive.google.com/uc?id=${{ env.GOOGLE_DRIVE_FILE_ID }} /transt.pth|value: transt.pth /transt.pth|' function-gpu.yaml
+          sed -i 's|value: https://drive.google.com/uc?id=${{ env.GOOGLE_DRIVE_FILE_ID }} /transt.pth|value: handler/transt.pth /transt.pth|' function-gpu.yaml
 
       - name: Build GPU image with nuctl
         run: |
@@ -105,7 +105,7 @@ jobs:
         working-directory: serverless/pytorch/dschoerk/transt/nuclio
         run: |
           sed -i 's|kind: ADD|kind: COPY|' function.yaml
-          sed -i 's|value: https://drive.google.com/uc?id=${{ env.GOOGLE_DRIVE_FILE_ID }} /transt.pth|value: transt.pth /transt.pth|' function.yaml
+          sed -i 's|value: https://drive.google.com/uc?id=${{ env.GOOGLE_DRIVE_FILE_ID }} /transt.pth|value: handler/transt.pth /transt.pth|' function.yaml
 
       - name: Build CPU image with nuctl
         run: |
