@@ -1,65 +1,85 @@
-# Upgrade Guide: UBC-AWP CVAT Fork
+# Setup Guide: UBC-AWP CVAT (TransT)
 
-This guide is for users who **already have installed CVAT** on their machine
-and want to upgrade to our customized fork with batch TransT tracking.
-
-## What's New
-
-- **Batch tracking with TransT**: Draw a bounding box on any frame and the tracker
-  automatically propagates it across N frames (configurable, default 100).
-  If the box drifts, manually correct it and click **Re-track** to continue
-  tracking from that frame.
-- **Adjusted default task settings**: Image quality 20, frame step 5, chunk size 2000.
+This guide will help you to setup a **fresh install** of the UBC-AWP CVAT fork with batch TransT
+tracking.
 
 ---
 
-## Step 1 — Switch to the UBC-AWP Fork
+## If you already have a CVAT folder
 
-Open a terminal in your existing `cvat` folder:
+If you previously cloned or downloaded CVAT in the same parent directory, **rename
+the old folder** so it does not conflict with the new clone (example: rename it to
+`CVAT_origin`). Then follow the steps below from an empty slot for the new repo.
+
+---
+
+## Prerequisites
+
+- **Docker** installed and running (e.g. [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Mac).
+- **Git** installed (`git --version` in Terminal).
+
+---
+
+## Step 1 — Choose where to put the project
+
+1. Open **Terminal** on your MacBook.
+2. Go to the parent folder where you want the project (for example your Desktop
+   or `Documents`):
+
+   ```bash
+   cd ~/Desktop
+   ```
+
+   **Tip:** In Finder, open the folder you want, then drag its icon from the title
+   bar (or the folder in the path bar) into the Terminal window and press **Return**.
+   That pastes the full path after `cd ` so you do not have to type it.
+
+---
+
+## Step 2 — Clone the UBC-AWP CVAT repository
 
 ```bash
-git remote set-url origin https://github.com/UBC-AWP/cvat.git
-git fetch origin
-git checkout develop
-git pull origin develop
+git clone https://github.com/UBC-AWP/cvat.git
+cd cvat
 ```
 
-If you get merge conflicts, the simplest approach is to back up any local changes,
-then do a clean checkout:
+---
 
-```bash
-git reset --hard origin/develop
-```
+## Step 3 — CPU-only setup (no NVIDIA GPU / typical Mac)
 
-## Step 2 — Pull and Start
-
-Everything — the UI, the Nuclio serverless runtime, and the TransT tracker — is
-pre-built and published to Docker Hub. No extra tools needed.
-
-```bash
-docker compose pull
-docker compose down
-docker compose up -d
-```
-
-On first run the TransT image (~several GB) will be pulled automatically.
-This is a one-time download.
-
-### CPU-only machines (no NVIDIA GPU / macOS)
-
-By default the GPU variant is deployed. To use the lighter CPU-only image instead,
-create a `.env` file (or export before running):
+The stack defaults to a GPU-oriented TransT image. On **CPU-only** machines (most
+Macs, or Linux without NVIDIA), create a `.env` file in the repo root **before**
+the first `docker compose up`:
 
 ```bash
 echo 'CVAT_TRANST_IMAGE=skysheng7/cvat-transt:latest-cpu' >> .env
 echo 'CVAT_TRANST_GPU=false' >> .env
+```
+
+---
+
+## Step 4 — Pull images and start CVAT
+
+Everything — the UI, Nuclio, and the TransT tracker — uses pre-built images from
+Docker Hub. No local build of CVAT is required for normal use.
+
+```bash
 docker compose up -d
 ```
 
-## Step 3 — Verify TransT Is Running
+On first run the TransT image (large download) is pulled once.
 
-After startup, an init container automatically registers the TransT function
-with the Nuclio serverless runtime. You can check its status:
+### Machines with an NVIDIA GPU (optional)
+
+If you use the default GPU image instead, skip the `.env` lines above (or remove
+those two variables) and run `docker compose pull` and `docker compose up -d` as
+usual. Ensure NVIDIA drivers and the NVIDIA Container Toolkit match your setup.
+
+---
+
+## Step 5 — Verify TransT
+
+After startup, an init container registers the TransT function with Nuclio:
 
 ```bash
 docker compose logs cvat_transt_init
@@ -71,22 +91,35 @@ You should see output ending with:
 TransT function registered. The dashboard will pull the image and start the container.
 ```
 
-You can also open the Nuclio dashboard at http://localhost:8070 to see the
-function status.
+You can also open the Nuclio dashboard at http://localhost:8070.
 
-## Step 4 — Start Using TransT
+---
 
-1. Open CVAT at http://localhost:8080
+## Step 6 — Create an admin user (username and password)
+
+A fresh install has **no default login**. With the stack running, create a
+superuser in the server container:
+
+```bash
+docker exec -it cvat_server bash -ic 'python3 ~/manage.py createsuperuser'
+```
+
+Follow the prompts to set **username**, **email** (optional), and **password**.
+Use those credentials when you sign in at http://localhost:8080.
+
+---
+
+## Step 7 — Use TransT in the UI
+
+1. Open CVAT at http://localhost:8080 and log in with the account you created
 2. Create a task and upload your video or images
-3. Open the task and go to the annotation view
-4. In the left toolbar, click the **AI Tools** icon (magic wand)
-5. Under **Tracker**, select **TransT** from the dropdown
-6. Set the number of frames to track (default: 100)
+3. Open the task in the annotation view
+4. Click the **AI Tools** icon (magic wand) in the left toolbar
+5. Under **Tracker**, choose **TransT**
+6. Set how many frames to track (default: 100)
 7. Draw a bounding box on the current frame — tracking starts automatically
-8. A progress dialog shows the tracking status
-9. If the box drifts on a later frame, manually adjust it, then click the
-   **Re-track** button next to the object in the sidebar to continue tracking
-   from that frame
+8. If the box drifts, adjust it, then click **Re-track** next to the object in the
+   sidebar
 
 ---
 
@@ -94,19 +127,19 @@ function status.
 
 | Problem | Solution |
 |---------|----------|
-| TransT not showing in the Tracker dropdown | Refresh the page. Check Nuclio dashboard at http://localhost:8070 — the function should show as "ready" |
-| Function stuck in "building" state | Check Docker can pull the image: `docker pull skysheng7/cvat-transt:latest-gpu` |
-| Tracking stops with a timeout error | The retry mechanism will automatically retry up to 5 times. If it keeps failing, try reducing the number of frames per batch |
-| `CUDA error: no kernel image` | Make sure your NVIDIA drivers are up to date. The GPU image uses CUDA 12.8 |
-| Containers won't start after rebuild | Run `docker compose down` first, then `docker compose up -d` |
-| Want to re-deploy TransT after changes | Remove the function container and re-run: `docker rm -f nuclio-nuclio-pth-dschoerk-transt && docker compose up -d cvat_transt_init` |
+| TransT missing in the Tracker dropdown | Hard refresh the page. Check http://localhost:8070 — the function should be **running** |
+| Function stuck in **building** | Ensure the image pulls: `docker pull skysheng7/cvat-transt:latest-cpu` (CPU) or `latest-gpu` (GPU) |
+| Tracking times out | Try fewer frames per batch; the client retries up to several times |
+| `CUDA error: no kernel image` | You are on the GPU image without a matching GPU/driver — use the CPU `.env` settings in Step 3 |
+| Containers fail after changes | `docker compose down` then `docker compose up -d` |
+| Redeploy TransT only | e.g. `docker rm -f nuclio-nuclio-pth-dschoerk-transt && docker compose up -d cvat_transt_init` |
 
 ---
 
-## Advanced: Manual Deployment with nuctl
+## Advanced: manual deployment with `nuctl`
 
-If you prefer manual control (or need to customize the function), you can
-skip the automatic init container and deploy TransT yourself using `nuctl`:
+If you need to deploy or customize the function yourself instead of the init
+container:
 
 ```bash
 # Install nuctl (macOS Apple Silicon example)
@@ -114,10 +147,8 @@ curl -L https://github.com/nuclio/nuclio/releases/download/1.15.9/nuctl-1.15.9-d
   -o /usr/local/bin/nuctl
 chmod +x /usr/local/bin/nuctl
 
-# Create the Nuclio project
 nuctl create project cvat --platform local
 
-# Deploy from source (builds locally — takes 5-10 min)
 nuctl deploy --project-name cvat \
   --path serverless/pytorch/dschoerk/transt/nuclio \
   --file serverless/pytorch/dschoerk/transt/nuclio/function-gpu.yaml \
@@ -125,5 +156,5 @@ nuctl deploy --project-name cvat \
   --triggers '{"myHttpTrigger": {"numWorkers": 1}}'
 ```
 
-To disable the automatic init container when using manual deployment,
-set `CVAT_TRANST_IMAGE=none` in your `.env` file.
+To turn off the automatic init container when using manual deployment, set
+`CVAT_TRANST_IMAGE=none` in `.env`.
