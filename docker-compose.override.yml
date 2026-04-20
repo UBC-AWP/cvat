@@ -1,0 +1,3 @@
+services:
+  cvat_opa:
+    platform: linux/arm64
